@@ -1,122 +1,68 @@
 # StudyBoard
 
-StudyBoard es una pizarra de escritorio **offline, local y multiplataforma** para Windows y Linux. Está inspirada en el flujo de trabajo de una pizarra digital para estudiar, sin depender de una cuenta o nube.
+StudyBoard es una pizarra de escritorio local y multiplataforma inspirada en el flujo de trabajo de las aplicaciones de pizarra digital. Está escrita en C++20 + Qt 6 y apunta a Windows y Linux.
 
-> Estado actual: prototipo temprano (0.2.0). Ya funciona como pizarra básica. La interfaz y el motor interno se están rediseñando para una experiencia de estudio más completa y eficiente.
+> Estado: **v0.3 en desarrollo**. Esta versión ya incluye la primera interfaz visual propia, galería local, barra flotante y ajustes básicos del lápiz. Todavía faltan funciones antes de considerarla una versión estable.
 
-Consulta [`ROADMAP.md`](ROADMAP.md) para el plan de desarrollo y [`docs/WHITEBOARD_REFERENCE.md`](docs/WHITEBOARD_REFERENCE.md) para la referencia funcional de interfaz.
+## Probar en Linux
 
-## Funciones actuales
-
-- lienzo muy grande con paneo y zoom
-- lápiz y resaltador
-- borrador por trazo/objeto
-- selección y movimiento de objetos
-- texto y notas adhesivas
-- rectángulos, elipses y líneas
-- insertar imágenes desde archivo o portapapeles
-- cuadrícula opcional
-- deshacer y rehacer
-- guardado local en `.studyboard`
-- autoguardado
-- exportación PNG
-- misma base de código para Windows y Linux
-
-## Ejecutables listos para usar
-
-El repositorio incluye GitHub Actions. Al subirlo a GitHub, entra a **Actions → Build StudyBoard** y descarga:
-
-- `StudyBoard-Windows-x64.zip`: descomprimir y abrir `StudyBoard.exe`.
-- `StudyBoard-Linux-x86_64`: contiene un `StudyBoard-Linux-x86_64.AppImage` portable.
-
-Para publicar una versión para tus amigos, crea un tag como `v0.2.0`. El workflow adjuntará automáticamente los paquetes a una GitHub Release.
-
-### Linux AppImage
-
-Después de descargarla:
+Dependencias en Arch/CachyOS:
 
 ```bash
-chmod +x StudyBoard-Linux-x86_64.AppImage
-./StudyBoard-Linux-x86_64.AppImage
+sudo pacman -S --needed base-devel cmake qt6-base qt6-wayland
 ```
 
-### Windows
-
-Descomprime `StudyBoard-Windows-x64.zip` y ejecuta `StudyBoard.exe`. El paquete incluye las DLL de Qt necesarias.
-
-## Compilar en CachyOS / Arch Linux
+Luego, desde la raíz del repositorio:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base
-./scripts/build-linux.sh
-./build/StudyBoard
+make run
 ```
 
-También se puede hacer manualmente:
+Eso configura CMake si hace falta, compila únicamente lo que cambió y abre StudyBoard.
+
+### Comandos Make
+
+```bash
+make              # compilar Release
+make run          # compilar y ejecutar
+make debug        # compilar y ejecutar Debug
+make reconfigure  # recrear build/
+make clean        # eliminar builds
+make help         # mostrar ayuda
+```
+
+También se puede usar CMake directamente:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j"$(nproc)"
+cmake --build build -j
 ./build/StudyBoard
 ```
 
-Si aparece:
+## Qué incluye v0.3
 
-```text
-[100%] Built target StudyBoard
-```
+- Pantalla inicial con biblioteca local y miniaturas.
+- Creación local automática de pizarras.
+- Barra de herramientas flotante.
+- Barra superior con título editable y estado de guardado.
+- Zoom flotante.
+- Lápiz, resaltador, borrador, notas, texto, imágenes y formas.
+- Panel de lápiz con grosor, opacidad, color y estabilización básica.
+- Selección rectangular mediante rubber band.
+- Pegado de imágenes con `Ctrl+V`.
+- `Ctrl+Z`, `Ctrl+Y`/`Ctrl+Shift+Z`, `Ctrl+S`, `Ctrl+O`, `Delete`.
+- Guardado automático y formato `.studyboard`.
+- Exportación a PNG.
+- Cuadrícula opcional.
 
-la compilación terminó correctamente. Los mensajes que empiezan con `warning:` son advertencias, no errores de compilación.
+## Próximos pasos
 
-## Compilar en Windows
-
-Se recomienda Qt 6 + CMake + Visual Studio 2022 o Qt Creator.
-
-```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
-
-Para una copia portable, `windeployqt` debe ejecutarse sobre `StudyBoard.exe`. El workflow de GitHub ya hace esto automáticamente.
-
-## Controles
-
-- rueda del mouse: zoom
-- `Espacio`: mover temporalmente el lienzo
-- herramienta **Mover**: paneo permanente
-- `Ctrl+S`: guardar
-- `Ctrl+Z`: deshacer
-- `Ctrl+Y`: rehacer
-- `Delete`: eliminar objetos seleccionados
-
-## Archivos `.studyboard`
-
-El formato es JSON legible y guarda trazos, figuras, textos e imágenes embebidas. No depende de servidores externos.
-
-## Subir a GitHub
-
-Desde la carpeta del proyecto:
-
-```bash
-git init
-git add .
-git commit -m "Primera version de StudyBoard"
-git branch -M main
-git remote add origin https://github.com/TU-USUARIO/StudyBoard.git
-git push -u origin main
-```
-
-Después revisa la pestaña **Actions**. Al terminar el workflow podrás descargar los ejecutables sin compilar manualmente.
-
-## Crear una Release
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-GitHub compilará Windows y Linux y los adjuntará a la Release correspondiente.
-
-## Licencia
-
-MIT. Se puede usar, modificar y compartir respetando el texto de `LICENSE`.
+- Selección mediante lazo libre.
+- Handles reales para redimensionar/rotar objetos y selecciones.
+- Perfiles independientes para varios lápices.
+- Fondo con puntos, gráfico, híbrido, reglas y otros patrones.
+- Mejor motor de tinta con presión de stylus.
+- Importación de PDF y escritura encima.
+- Undo/redo por comandos para reducir el uso de memoria en pizarras grandes.
+- Copiar/cortar/duplicar objetos.
+- Empaquetado final `.AppImage` y `.exe` portable.

@@ -1,10 +1,11 @@
 #include "BoardScene.h"
 
+#include <algorithm>
 #include <cmath>
 #include <QApplication>
-#include <QBuffer>
 #include <QClipboard>
 #include <QFileDialog>
+#include <QFont>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsLineItem>
 #include <QGraphicsPathItem>
@@ -36,6 +37,14 @@ void BoardScene::setTool(Tool tool) {
     emit panRequested(tool == Tool::Pan);
 }
 
+void BoardScene::setStrokeOpacity(qreal opacity) {
+    m_strokeOpacity = std::clamp(opacity, 0.05, 1.0);
+}
+
+void BoardScene::setStabilization(int amount) {
+    m_stabilization = std::clamp(amount, 0, 100);
+}
+
 void BoardScene::setGridVisible(bool visible) {
     if (m_gridVisible == visible) return;
     m_gridVisible = visible;
@@ -49,31 +58,38 @@ void BoardScene::makeInteractive(QGraphicsItem *item) {
 
 void BoardScene::beginStroke(const QPointF &pos, bool highlighter) {
     m_drawing = true;
+    m_smoothedPos = pos;
     m_path = QPainterPath(pos);
     auto *item = addPath(m_path);
-    QPen pen(m_color, highlighter ? m_strokeWidth * 3.0 : m_strokeWidth,
+
+    QColor strokeColor = m_color;
+    const qreal opacity = highlighter ? std::min(m_strokeOpacity, 0.38) : m_strokeOpacity;
+    strokeColor.setAlphaF(opacity);
+
+    QPen pen(strokeColor, highlighter ? m_strokeWidth * 4.0 : m_strokeWidth,
              Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-    if (highlighter) {
-        QColor translucent = m_color;
-        translucent.setAlpha(80);
-        pen.setColor(translucent);
-        item->setOpacity(0.75);
-        item->setData(TypeRole, kHighlight);
-    } else {
-        item->setData(TypeRole, kStroke);
-    }
     item->setPen(pen);
+    item->setData(TypeRole, highlighter ? kHighlight : kStroke);
     m_currentStroke = item;
 }
 
 void BoardScene::updateStroke(const QPointF &pos) {
     if (!m_currentStroke) return;
-    m_path.lineTo(pos);
+
+    QPointF point = pos;
+    if (m_stabilization > 0) {
+        const qreal amount = static_cast<qreal>(m_stabilization) / 100.0;
+        const qreal responsiveness = 1.0 - (0.82 * amount);
+        m_smoothedPos += (pos - m_smoothedPos) * responsiveness;
+        point = m_smoothedPos;
+    }
+
+    m_path.lineTo(point);
     m_currentStroke->setPath(m_path);
 }
 
 void BoardScene::eraseAt(const QPointF &pos) {
-    const auto hitItems = items(QRectF(pos.x() - 8, pos.y() - 8, 16, 16),
+    const auto hitItems = items(QRectF(pos.x() - 10, pos.y() - 10, 20, 20),
                                 Qt::IntersectsItemShape, Qt::DescendingOrder);
     for (auto *item : hitItems) {
         if (item && !item->parentItem()) {
@@ -95,7 +111,7 @@ void BoardScene::addTextAt(const QPointF &pos, bool sticky) {
     item->setDefaultTextColor(sticky ? QColor("#3b2f00") : m_color);
     item->setFont(QFont(QStringLiteral("Sans Serif"), sticky ? 13 : 12));
     if (sticky) {
-        item->setHtml(QString("<div style='background:#FFF2A8; padding:14px; min-width:180px;'>%1</div>")
+        item->setHtml(QString("<div style='background:#FFE999; padding:14px; min-width:180px;'>%1</div>")
                       .arg(text.toHtmlEscaped().replace("\n", "<br>")));
         item->setData(TypeRole, kSticky);
     } else {
@@ -107,23 +123,13 @@ void BoardScene::addTextAt(const QPointF &pos, bool sticky) {
     emit contentChanged();
 }
 
-void BoardScene::addImageAt(const QPointF &pos) {
-    QPixmap pixmap;
-    QString sourcePath;
+void BoardScene::insertPixmapAt(const QPixmap &source, const QPointF &pos, const QString &sourcePath) {
+    if (source.isNull()) return;
 
-    const QClipboard *clipboard = QApplication::clipboard();
-    if (clipboard->pixmap().isNull()) {
-        sourcePath = QFileDialog::getOpenFileName(nullptr, tr("Insertar imagen"), {},
-                                                  tr("Imágenes (*.png *.jpg *.jpeg *.webp *.bmp)"));
-        if (sourcePath.isEmpty()) return;
-        pixmap.load(sourcePath);
-    } else {
-        pixmap = clipboard->pixmap();
+    QPixmap pixmap = source;
+    if (pixmap.width() > 1600 || pixmap.height() > 1200) {
+        pixmap = pixmap.scaled(1600, 1200, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     }
-
-    if (pixmap.isNull()) return;
-    if (pixmap.width() > 1200 || pixmap.height() > 900)
-        pixmap = pixmap.scaled(1200, 900, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     auto *item = addPixmap(pixmap);
     item->setData(TypeRole, kImage);
@@ -133,9 +139,35 @@ void BoardScene::addImageAt(const QPointF &pos) {
     emit contentChanged();
 }
 
+bool BoardScene::pasteImageAt(const QPointF &pos) {
+    const QClipboard *clipboard = QApplication::clipboard();
+    const QPixmap pixmap = clipboard->pixmap();
+    if (pixmap.isNull()) return false;
+    insertPixmapAt(pixmap, pos);
+    return true;
+}
+
+void BoardScene::addImageAt(const QPointF &pos) {
+    const QClipboard *clipboard = QApplication::clipboard();
+    if (!clipboard->pixmap().isNull()) {
+        insertPixmapAt(clipboard->pixmap(), pos);
+        return;
+    }
+
+    const QString sourcePath = QFileDialog::getOpenFileName(
+        nullptr, tr("Insertar imagen"), {}, tr("Imágenes (*.png *.jpg *.jpeg *.webp *.bmp)"));
+    if (sourcePath.isEmpty()) return;
+
+    QPixmap pixmap(sourcePath);
+    if (pixmap.isNull()) return;
+    insertPixmapAt(pixmap, pos, sourcePath);
+}
+
 void BoardScene::finishShape(const QPointF &pos) {
     const QRectF rect(m_startPos, pos);
-    const QPen pen(m_color, m_strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    QColor color = m_color;
+    color.setAlphaF(m_strokeOpacity);
+    const QPen pen(color, m_strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     QGraphicsItem *item = nullptr;
 
     switch (m_tool) {
@@ -241,6 +273,10 @@ void BoardScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
         if ((m_tool == Tool::Pen || m_tool == Tool::Highlighter) && m_drawing) {
             updateStroke(event->scenePos());
+            if (m_stabilization > 0) {
+                m_path.lineTo(event->scenePos());
+                if (m_currentStroke) m_currentStroke->setPath(m_path);
+            }
             makeInteractive(m_currentStroke);
             m_currentStroke = nullptr;
             m_drawing = false;
@@ -261,14 +297,14 @@ void BoardScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event) {
 }
 
 void BoardScene::drawBackground(QPainter *painter, const QRectF &rect) {
-    painter->fillRect(rect, QColor("#fbfbfc"));
+    painter->fillRect(rect, QColor("#f5f5f6"));
     if (!m_gridVisible) return;
 
     constexpr qreal grid = 32.0;
     const qreal left = std::floor(rect.left() / grid) * grid;
     const qreal top = std::floor(rect.top() / grid) * grid;
 
-    QPen pen(QColor(220, 224, 230), 0);
+    QPen pen(QColor(218, 221, 226), 0);
     painter->setPen(pen);
     for (qreal x = left; x < rect.right(); x += grid)
         painter->drawLine(QLineF(x, rect.top(), x, rect.bottom()));
