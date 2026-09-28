@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=StudyBoard
+Comment=Pizarra de escritorio offline para estudiar
+Exec=StudyBoard
+Icon=io.github.studyboard.StudyBoard
+Categories=Education;Utility;
+Terminal=false
+StartupNotify=true
+MimeType=application/x-studyboard;

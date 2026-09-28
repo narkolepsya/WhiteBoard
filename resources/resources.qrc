@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="studyboard.svg">io.github.studyboard.StudyBoard.svg</file>
+  </qresource>
+</RCC>
