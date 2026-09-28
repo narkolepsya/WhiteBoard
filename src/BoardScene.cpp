@@ -48,7 +48,24 @@ void BoardScene::setStabilization(int amount) {
 void BoardScene::setGridVisible(bool visible) {
     if (m_gridVisible == visible) return;
     m_gridVisible = visible;
+    if (visible && m_backgroundStyle == BackgroundStyle::Solid)
+        m_backgroundStyle = BackgroundStyle::Grid;
     invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+}
+
+void BoardScene::setBackgroundColor(const QColor &color) {
+    if (m_backgroundColor == color) return;
+    m_backgroundColor = color;
+    invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+    emit contentChanged();
+}
+
+void BoardScene::setBackgroundStyle(BackgroundStyle style) {
+    if (m_backgroundStyle == style) return;
+    m_backgroundStyle = style;
+    m_gridVisible = (style == BackgroundStyle::Grid);
+    invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+    emit contentChanged();
 }
 
 void BoardScene::makeInteractive(QGraphicsItem *item) {
@@ -108,10 +125,10 @@ void BoardScene::addTextAt(const QPointF &pos, bool sticky) {
     if (!ok || text.trimmed().isEmpty()) return;
 
     auto *item = addText(text);
-    item->setDefaultTextColor(sticky ? QColor("#3b2f00") : m_color);
+    item->setDefaultTextColor(sticky ? QColor("#473000") : m_color);
     item->setFont(QFont(QStringLiteral("Sans Serif"), sticky ? 13 : 12));
     if (sticky) {
-        item->setHtml(QString("<div style='background:#FFE999; padding:14px; min-width:180px;'>%1</div>")
+        item->setHtml(QString("<div style='background:#F7D774; border:1px solid #E8C55A; border-radius:10px; padding:14px; min-width:180px;'>%1</div>")
                       .arg(text.toHtmlEscaped().replace("\n", "<br>")));
         item->setData(TypeRole, kSticky);
     } else {
@@ -297,17 +314,54 @@ void BoardScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event) {
 }
 
 void BoardScene::drawBackground(QPainter *painter, const QRectF &rect) {
-    painter->fillRect(rect, QColor("#f5f5f6"));
-    if (!m_gridVisible) return;
+    painter->fillRect(rect, m_backgroundColor);
 
-    constexpr qreal grid = 32.0;
-    const qreal left = std::floor(rect.left() / grid) * grid;
-    const qreal top = std::floor(rect.top() / grid) * grid;
+    QColor lineColor = QColor(0, 0, 0, 28);
+    QColor accentColor = QColor(0, 0, 0, 45);
 
-    QPen pen(QColor(218, 221, 226), 0);
-    painter->setPen(pen);
-    for (qreal x = left; x < rect.right(); x += grid)
-        painter->drawLine(QLineF(x, rect.top(), x, rect.bottom()));
-    for (qreal y = top; y < rect.bottom(); y += grid)
-        painter->drawLine(QLineF(rect.left(), y, rect.right(), y));
+    switch (m_backgroundStyle) {
+    case BackgroundStyle::Solid:
+        return;
+
+    case BackgroundStyle::Dots: {
+        constexpr qreal step = 28.0;
+        const qreal left = std::floor(rect.left() / step) * step;
+        const qreal top = std::floor(rect.top() / step) * step;
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(lineColor);
+        for (qreal x = left; x < rect.right(); x += step) {
+            for (qreal y = top; y < rect.bottom(); y += step)
+                painter->drawEllipse(QPointF(x, y), 1.25, 1.25);
+        }
+        return;
+    }
+
+    case BackgroundStyle::Grid: {
+        constexpr qreal grid = 32.0;
+        const qreal left = std::floor(rect.left() / grid) * grid;
+        const qreal top = std::floor(rect.top() / grid) * grid;
+
+        painter->setPen(QPen(lineColor, 0));
+        for (qreal x = left; x < rect.right(); x += grid)
+            painter->drawLine(QLineF(x, rect.top(), x, rect.bottom()));
+        for (qreal y = top; y < rect.bottom(); y += grid)
+            painter->drawLine(QLineF(rect.left(), y, rect.right(), y));
+        return;
+    }
+
+    case BackgroundStyle::Ruled: {
+        constexpr qreal step = 30.0;
+        const qreal top = std::floor(rect.top() / step) * step;
+        painter->setPen(QPen(lineColor, 0));
+        for (qreal y = top; y < rect.bottom(); y += step)
+            painter->drawLine(QLineF(rect.left(), y, rect.right(), y));
+
+        constexpr qreal marginX = 120.0;
+        painter->setPen(QPen(accentColor, 0));
+        const qreal left = std::floor(rect.left() / marginX) * marginX;
+        for (qreal x = left; x < rect.right(); x += marginX)
+            painter->drawLine(QLineF(x, rect.top(), x, rect.bottom()));
+        return;
+    }
+    }
 }

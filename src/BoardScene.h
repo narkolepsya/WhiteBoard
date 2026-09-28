@@ -26,6 +26,13 @@ public:
         Image
     };
 
+    enum class BackgroundStyle {
+        Solid,
+        Dots,
+        Grid,
+        Ruled
+    };
+
     enum DataRole {
         TypeRole = Qt::UserRole + 1,
         PayloadRole
@@ -51,6 +58,12 @@ public:
     void setGridVisible(bool visible);
     bool gridVisible() const { return m_gridVisible; }
 
+    void setBackgroundColor(const QColor &color);
+    QColor backgroundColor() const { return m_backgroundColor; }
+
+    void setBackgroundStyle(BackgroundStyle style);
+    BackgroundStyle backgroundStyle() const { return m_backgroundStyle; }
+
     bool pasteImageAt(const QPointF &pos);
 
 signals:
@@ -74,11 +87,13 @@ private:
     void makeInteractive(QGraphicsItem *item);
 
     Tool m_tool = Tool::Pen;
-    QColor m_color = QColor("#1f2937");
+    QColor m_color = QColor("#20242d");
     qreal m_strokeWidth = 3.0;
     qreal m_strokeOpacity = 1.0;
     int m_stabilization = 35;
     bool m_gridVisible = false;
+    QColor m_backgroundColor = QColor("#f3f2f1");
+    BackgroundStyle m_backgroundStyle = BackgroundStyle::Solid;
 
     bool m_drawing = false;
     QPointF m_startPos;

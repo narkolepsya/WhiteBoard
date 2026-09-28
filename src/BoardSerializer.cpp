@@ -16,19 +16,39 @@
 #include <QPen>
 
 namespace {
+QString backgroundStyleToString(BoardScene::BackgroundStyle style) {
+    switch (style) {
+    case BoardScene::BackgroundStyle::Solid: return "solid";
+    case BoardScene::BackgroundStyle::Dots: return "dots";
+    case BoardScene::BackgroundStyle::Grid: return "grid";
+    case BoardScene::BackgroundStyle::Ruled: return "ruled";
+    }
+    return "solid";
+}
+
+BoardScene::BackgroundStyle backgroundStyleFromString(const QString &value) {
+    if (value == "dots") return BoardScene::BackgroundStyle::Dots;
+    if (value == "grid") return BoardScene::BackgroundStyle::Grid;
+    if (value == "ruled") return BoardScene::BackgroundStyle::Ruled;
+    return BoardScene::BackgroundStyle::Solid;
+}
+
 QJsonObject penToJson(const QPen &pen) {
     return {{"color", pen.color().name(QColor::HexArgb)}, {"width", pen.widthF()}};
 }
+
 QPen penFromJson(const QJsonObject &o) {
     return QPen(QColor(o["color"].toString()), o["width"].toDouble(2.0),
                 Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 }
+
 QJsonObject baseItem(const QGraphicsItem *item) {
     return {{"type", item->data(BoardScene::TypeRole).toString()},
             {"x", item->pos().x()}, {"y", item->pos().y()},
             {"z", item->zValue()}, {"rotation", item->rotation()},
             {"scale", item->scale()}, {"opacity", item->opacity()}};
 }
+
 void applyBase(QGraphicsItem *item, const QJsonObject &o) {
     item->setPos(o["x"].toDouble(), o["y"].toDouble());
     item->setZValue(o["z"].toDouble());
@@ -83,8 +103,11 @@ QByteArray BoardSerializer::toJson(const BoardScene &scene) {
         itemsArray.append(o);
     }
 
-    QJsonObject root{{"format", "StudyBoard"}, {"version", 1},
-                     {"grid", scene.gridVisible()}, {"items", itemsArray}};
+    QJsonObject root{{"format", "StudyBoard"}, {"version", 2},
+                     {"grid", scene.gridVisible()},
+                     {"backgroundColor", scene.backgroundColor().name(QColor::HexArgb)},
+                     {"backgroundStyle", backgroundStyleToString(scene.backgroundStyle())},
+                     {"items", itemsArray}};
     return QJsonDocument(root).toJson(QJsonDocument::Indented);
 }
 
@@ -102,7 +125,10 @@ bool BoardSerializer::fromJson(BoardScene &scene, const QByteArray &data, QStrin
     }
 
     scene.clear();
-    scene.setGridVisible(root["grid"].toBool());
+    scene.setBackgroundColor(QColor(root["backgroundColor"].toString("#f3f2f1")));
+    scene.setBackgroundStyle(backgroundStyleFromString(root["backgroundStyle"].toString("solid")));
+    if (!root.contains("backgroundStyle"))
+        scene.setGridVisible(root["grid"].toBool());
 
     for (const auto &value : root["items"].toArray()) {
         const auto o = value.toObject();

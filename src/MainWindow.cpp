@@ -4,8 +4,8 @@
 #include "BoardView.h"
 
 #include <QAction>
-#include <functional>
 #include <QApplication>
+#include <functional>
 #include <QCloseEvent>
 #include <QCryptographicHash>
 #include <QCursor>
@@ -14,7 +14,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
+#include <QGraphicsDropShadowEffect>
 #include <QGraphicsItem>
+#include <QGraphicsOpacityEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QImage>
@@ -25,8 +27,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
+#include <QParallelAnimationGroup>
+#include <QPropertyAnimation>
 #include <QPushButton>
-#include <QStyle>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSettings>
@@ -34,6 +37,7 @@
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 #include <QUuid>
@@ -50,6 +54,22 @@ QString prettyModified(const QFileInfo &info) {
     if (modified.date() == QDate::currentDate())
         return QObject::tr("Editado hoy %1").arg(modified.time().toString("HH:mm"));
     return QObject::tr("Editado %1").arg(modified.toString("dd/MM/yyyy HH:mm"));
+}
+
+QIcon themedIcon(const QStringList &names, const QIcon &fallback = QIcon()) {
+    for (const QString &name : names) {
+        const QIcon icon = QIcon::fromTheme(name);
+        if (!icon.isNull()) return icon;
+    }
+    return fallback;
+}
+
+void applyShadow(QWidget *widget, int blur = 28, int offsetY = 8, QColor color = QColor(18, 18, 23, 36)) {
+    auto *shadow = new QGraphicsDropShadowEffect(widget);
+    shadow->setBlurRadius(blur);
+    shadow->setOffset(0, offsetY);
+    shadow->setColor(color);
+    widget->setGraphicsEffect(shadow);
 }
 }
 
@@ -74,76 +94,173 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 void MainWindow::buildUi() {
-    resize(1440, 900);
-    setMinimumSize(900, 600);
+    resize(1480, 920);
+    setMinimumSize(980, 640);
     setWindowTitle("StudyBoard");
     menuBar()->hide();
     statusBar()->hide();
 
     setStyleSheet(R"(
-        QMainWindow { background: #f3f3f4; }
-        QWidget { font-family: "Inter", "Segoe UI", "Noto Sans", sans-serif; }
-        QFrame#TopBar { background: #ffffff; border-bottom: 1px solid #e7e7e9; }
-        QFrame#FloatingBar, QFrame#ZoomBar, QFrame#PenPopup {
-            background: #ffffff;
-            border: 1px solid #e3e3e6;
-            border-radius: 12px;
+        QMainWindow { background: #eeedec; }
+        QWidget { font-family: "Inter", "Segoe UI", "Noto Sans", sans-serif; color: #202124; }
+
+        QFrame#HomeHeader {
+            background: #4a4744;
+            border: none;
         }
+        QLabel#HomeTitle {
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: 0.2px;
+        }
+        QLabel#HomeSubtitle {
+            color: rgba(255,255,255,0.72);
+            font-size: 12px;
+        }
+
+        QScrollArea, QWidget#GalleryCanvas {
+            background: #efefef;
+            border: none;
+        }
+
+        QFrame#BoardCard {
+            background: #ffffff;
+            border: 1px solid #e5e2df;
+            border-radius: 18px;
+        }
+        QPushButton#PreviewButton {
+            background: #f7f6f5;
+            border: none;
+            border-top-left-radius: 18px;
+            border-top-right-radius: 18px;
+            text-align: center;
+            padding: 0;
+        }
+        QPushButton#PreviewButton:hover {
+            background: #f1f0ee;
+        }
+        QPushButton#NewBoardButton {
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #f1f5ff, stop:1 #e5ecff);
+            color: #2e5ce6;
+            border: none;
+            border-radius: 18px;
+            font-size: 42px;
+            font-weight: 300;
+        }
+        QPushButton#NewBoardButton:hover { background: #dfe8ff; }
+        QLabel#NewBoardLabel {
+            background: transparent;
+            color: #1f2430;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 0 0 14px 0;
+        }
+        QLabel#CardTitle {
+            color: #191919;
+            font-weight: 650;
+            font-size: 14px;
+        }
+        QLabel#CardMeta {
+            color: #77747b;
+            font-size: 11px;
+        }
+
+        QFrame#TopBar {
+            background: rgba(255,255,255,0.92);
+            border-bottom: 1px solid #e7e4e2;
+        }
+
+        QFrame#FloatingBar, QFrame#ZoomBar, QFrame#PenPopup {
+            background: rgba(255,255,255,0.96);
+            border: 1px solid #e3dfdb;
+            border-radius: 18px;
+        }
+
         QToolButton {
             background: transparent;
             border: none;
-            border-radius: 8px;
-            color: #171719;
-            padding: 7px;
-            font-size: 15px;
+            border-radius: 12px;
+            color: #1f1f21;
+            padding: 6px;
+            font-size: 14px;
         }
-        QToolButton:hover { background: #f0f0f2; }
-        QToolButton[toolActive="true"] { background: #e8e8eb; }
-        QToolButton#PrimaryButton { background: #1f5eff; color: white; }
-        QToolButton#PrimaryButton:hover { background: #154fdf; }
+        QToolButton:hover { background: #f0eeeb; }
+        QToolButton[toolActive="true"] {
+            background: #ece9e4;
+            color: #131417;
+        }
+        QToolButton#PrimaryButton {
+            background: #f6f7fb;
+            color: #2e5ce6;
+            border: 1px solid #dce3ff;
+            padding: 7px 12px;
+        }
+        QToolButton#PrimaryButton:hover { background: #edf1ff; }
+
         QLineEdit#BoardTitle {
             background: transparent;
             border: none;
             color: #161618;
             font-weight: 600;
-            font-size: 15px;
+            font-size: 16px;
             padding: 5px 7px;
         }
-        QLineEdit#BoardTitle:focus { background: #f5f5f7; border-radius: 7px; }
-        QLabel#SaveState { color: #77777d; font-size: 12px; }
-        QLabel#HomeTitle { color: #ffffff; font-weight: 700; font-size: 18px; }
-        QFrame#HomeHeader { background: #484746; border: none; }
-        QScrollArea { background: #eeeeef; border: none; }
-        QWidget#GalleryCanvas { background: #eeeeef; }
-        QFrame#BoardCard {
+        QLineEdit#BoardTitle:focus {
+            background: #f7f4f1;
+            border-radius: 10px;
+        }
+        QLabel#SaveState {
+            color: #706d74;
+            font-size: 12px;
+            padding-right: 6px;
+        }
+        QLabel#PanelTitle {
+            color: #212124;
+            font-weight: 650;
+            font-size: 13px;
+        }
+        QLabel#PanelValue {
+            color: #706d74;
+            font-size: 12px;
+        }
+
+        QSlider::groove:horizontal {
+            height: 4px;
+            background: #dedad6;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            width: 14px;
+            margin: -6px 0;
             background: #ffffff;
-            border: 1px solid #dcdce0;
+            border: 1px solid #78757d;
+            border-radius: 7px;
+        }
+        QSlider::sub-page:horizontal {
+            background: #26272b;
+            border-radius: 2px;
+        }
+
+        QMenu {
+            background: #ffffff;
+            color: #1b1b1e;
+            border: 1px solid #e1dfdc;
+            padding: 6px;
             border-radius: 10px;
         }
-        QPushButton#PreviewButton {
-            background: #fafafa;
-            border: none;
-            border-top-left-radius: 9px;
-            border-top-right-radius: 9px;
-            text-align: center;
+        QMenu::item {
+            padding: 8px 28px 8px 12px;
+            border-radius: 8px;
         }
-        QPushButton#NewBoardButton {
-            background: #1d43ff;
-            color: #ffffff;
+        QMenu::item:selected { background: #f1efec; }
+        QToolTip {
+            background: #2f3137;
+            color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 54px;
+            padding: 6px 8px;
+            border-radius: 8px;
         }
-        QPushButton#NewBoardButton:hover { background: #1738d8; }
-        QLabel#CardTitle { color: #19191b; font-weight: 650; font-size: 14px; }
-        QLabel#CardMeta { color: #7a7a80; font-size: 11px; }
-        QSlider::groove:horizontal { height: 4px; background: #d8d8dc; border-radius: 2px; }
-        QSlider::handle:horizontal { width: 14px; margin: -5px 0; background: #ffffff; border: 1px solid #777; border-radius: 7px; }
-        QSlider::sub-page:horizontal { background: #2c2c31; border-radius: 2px; }
-        QMenu { background: #ffffff; color: #1b1b1e; border: 1px solid #dedee2; padding: 6px; }
-        QMenu::item { padding: 8px 24px 8px 12px; border-radius: 6px; }
-        QMenu::item:selected { background: #f0f0f3; }
-        QToolTip { background: #343438; color: white; border: none; padding: 5px; }
     )");
 
     m_pages = new QStackedWidget(this);
@@ -164,18 +281,27 @@ void MainWindow::buildHomePage() {
 
     auto *header = new QFrame(m_homePage);
     header->setObjectName("HomeHeader");
-    header->setFixedHeight(48);
+    header->setFixedHeight(60);
     auto *headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(18, 0, 18, 0);
+    headerLayout->setSpacing(14);
 
+    auto *titles = new QVBoxLayout();
+    titles->setSpacing(1);
     auto *appTitle = new QLabel(tr("StudyBoard"), header);
     appTitle->setObjectName("HomeTitle");
-    headerLayout->addWidget(appTitle);
+    auto *subtitle = new QLabel(tr("Pizarras locales para estudiar, dibujar y organizar ideas"), header);
+    subtitle->setObjectName("HomeSubtitle");
+    titles->addWidget(appTitle);
+    titles->addWidget(subtitle);
+    headerLayout->addLayout(titles);
     headerLayout->addStretch();
 
     auto *open = new QToolButton(header);
+    open->setObjectName("PrimaryButton");
     open->setText(tr("Abrir archivo"));
-    open->setStyleSheet("color:white; padding:6px 12px;");
+    open->setIcon(themedIcon({"document-open-symbolic", "document-open"}, style()->standardIcon(QStyle::SP_DialogOpenButton)));
+    open->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     connect(open, &QToolButton::clicked, this, &MainWindow::openBoard);
     headerLayout->addWidget(open);
     layout->addWidget(header);
@@ -186,8 +312,8 @@ void MainWindow::buildHomePage() {
     canvas->setObjectName("GalleryCanvas");
     m_galleryGrid = new QGridLayout(canvas);
     m_galleryGrid->setContentsMargins(36, 28, 36, 36);
-    m_galleryGrid->setHorizontalSpacing(20);
-    m_galleryGrid->setVerticalSpacing(20);
+    m_galleryGrid->setHorizontalSpacing(22);
+    m_galleryGrid->setVerticalSpacing(22);
     m_galleryGrid->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     scroll->setWidget(canvas);
     layout->addWidget(scroll, 1);
@@ -195,12 +321,12 @@ void MainWindow::buildHomePage() {
     m_pages->addWidget(m_homePage);
 }
 
-QToolButton *MainWindow::createToolbarButton(const QString &text, const QString &tooltip, bool checkable) {
+QToolButton *MainWindow::createToolbarButton(const QString &fallbackText, const QString &tooltip, bool checkable) {
     auto *button = new QToolButton(m_bottomBar);
-    button->setText(text);
+    button->setText(fallbackText);
     button->setToolTip(tooltip);
     button->setCheckable(checkable);
-    button->setFixedSize(38, 38);
+    button->setFixedSize(42, 42);
     button->setProperty("toolActive", false);
     return button;
 }
@@ -213,21 +339,21 @@ void MainWindow::buildBoardPage() {
 
     auto *topBar = new QFrame(m_boardPage);
     topBar->setObjectName("TopBar");
-    topBar->setFixedHeight(48);
+    topBar->setFixedHeight(54);
     auto *topLayout = new QHBoxLayout(topBar);
     topLayout->setContentsMargins(10, 0, 12, 0);
     topLayout->setSpacing(6);
 
     auto *homeButton = new QToolButton(topBar);
-    homeButton->setText(QStringLiteral("⌂"));
+    homeButton->setIcon(themedIcon({"go-home-symbolic", "go-home"}, style()->standardIcon(QStyle::SP_DesktopIcon)));
     homeButton->setToolTip(tr("Volver a mis pizarras"));
-    homeButton->setFixedSize(36, 36);
+    homeButton->setFixedSize(38, 38);
     connect(homeButton, &QToolButton::clicked, this, &MainWindow::showHome);
     topLayout->addWidget(homeButton);
 
     auto *separator = new QFrame(topBar);
     separator->setFrameShape(QFrame::VLine);
-    separator->setStyleSheet("color:#dddddf;");
+    separator->setStyleSheet("color:#dfdcda;");
     separator->setFixedHeight(22);
     topLayout->addWidget(separator);
 
@@ -244,14 +370,17 @@ void MainWindow::buildBoardPage() {
 
     auto *exportButton = new QToolButton(topBar);
     exportButton->setText(tr("Exportar"));
+    exportButton->setObjectName("PrimaryButton");
+    exportButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    exportButton->setIcon(themedIcon({"document-save-as-symbolic", "document-export"}, style()->standardIcon(QStyle::SP_DialogSaveButton)));
     exportButton->setToolTip(tr("Exportar la pizarra como imagen"));
     connect(exportButton, &QToolButton::clicked, this, &MainWindow::exportPng);
     topLayout->addWidget(exportButton);
 
     auto *settingsButton = new QToolButton(topBar);
-    settingsButton->setText(QStringLiteral("⚙"));
+    settingsButton->setIcon(themedIcon({"open-menu-symbolic", "preferences-system"}, style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
     settingsButton->setToolTip(tr("Opciones"));
-    settingsButton->setFixedSize(36, 36);
+    settingsButton->setFixedSize(38, 38);
     connect(settingsButton, &QToolButton::clicked, this, &MainWindow::showMoreMenu);
     topLayout->addWidget(settingsButton);
 
@@ -265,15 +394,19 @@ void MainWindow::buildBoardPage() {
     m_bottomBar = new QFrame(m_boardPage);
     m_bottomBar->setObjectName("FloatingBar");
     auto *tools = new QHBoxLayout(m_bottomBar);
-    tools->setContentsMargins(7, 6, 7, 6);
-    tools->setSpacing(3);
+    tools->setContentsMargins(8, 7, 8, 7);
+    tools->setSpacing(4);
 
     auto *undoButton = createToolbarButton(QStringLiteral("↶"), tr("Deshacer (Ctrl+Z)"));
+    undoButton->setIcon(themedIcon({"edit-undo-symbolic", "edit-undo"}, style()->standardIcon(QStyle::SP_ArrowBack)));
     connect(undoButton, &QToolButton::clicked, this, &MainWindow::undo);
     tools->addWidget(undoButton);
 
-    auto makeTool = [this, tools](const QString &text, const QString &tip, BoardScene::Tool tool) {
-        auto *button = createToolbarButton(text, tip, true);
+    auto addTool = [this, tools](const QString &fallbackText, const QString &tip, BoardScene::Tool tool,
+                                 const QStringList &iconNames, const QIcon &fallbackIcon = QIcon()) {
+        auto *button = createToolbarButton(fallbackText, tip, true);
+        button->setIcon(themedIcon(iconNames, fallbackIcon));
+        button->setIconSize(QSize(18, 18));
         const int value = static_cast<int>(tool);
         m_toolButtons.insert(value, button);
         connect(button, &QToolButton::clicked, this, [this, value] { setTool(value); });
@@ -281,10 +414,13 @@ void MainWindow::buildBoardPage() {
         return button;
     };
 
-    makeTool(QStringLiteral("➤"), tr("Seleccionar"), BoardScene::Tool::Select);
-    makeTool(QStringLiteral("✋"), tr("Mover lienzo (o mantén Espacio)"), BoardScene::Tool::Pan);
+    addTool(QStringLiteral("➤"), tr("Seleccionar"), BoardScene::Tool::Select,
+            {"transform-move", "cursor-arrow"}, style()->standardIcon(QStyle::SP_ArrowForward));
+    addTool(QStringLiteral("✋"), tr("Mover lienzo (o mantén Espacio)"), BoardScene::Tool::Pan,
+            {"input-touchpad-symbolic", "pan-up-symbolic"}, style()->standardIcon(QStyle::SP_DirOpenIcon));
 
     m_penButton = createToolbarButton(QStringLiteral("✎"), tr("Lápiz"), true);
+    m_penButton->setIcon(themedIcon({"draw-freehand", "draw-freehand-symbolic"}));
     m_toolButtons.insert(static_cast<int>(BoardScene::Tool::Pen), m_penButton);
     connect(m_penButton, &QToolButton::clicked, this, [this] {
         if (m_scene->tool() == BoardScene::Tool::Pen && m_penButton->property("toolActive").toBool())
@@ -295,6 +431,7 @@ void MainWindow::buildBoardPage() {
     tools->addWidget(m_penButton);
 
     m_highlighterButton = createToolbarButton(QStringLiteral("▰"), tr("Resaltador"), true);
+    m_highlighterButton->setIcon(themedIcon({"draw-highlight", "format-text-highlight"}));
     m_toolButtons.insert(static_cast<int>(BoardScene::Tool::Highlighter), m_highlighterButton);
     connect(m_highlighterButton, &QToolButton::clicked, this, [this] {
         if (m_scene->tool() == BoardScene::Tool::Highlighter && m_highlighterButton->property("toolActive").toBool())
@@ -304,36 +441,43 @@ void MainWindow::buildBoardPage() {
     });
     tools->addWidget(m_highlighterButton);
 
-    makeTool(QStringLiteral("⌫"), tr("Borrador"), BoardScene::Tool::Eraser);
-    makeTool(QStringLiteral("▣"), tr("Nota adhesiva"), BoardScene::Tool::StickyNote);
-    makeTool(QStringLiteral("T"), tr("Texto"), BoardScene::Tool::Text);
+    addTool(QStringLiteral("⌫"), tr("Borrador"), BoardScene::Tool::Eraser,
+            {"draw-eraser", "edit-clear"}, style()->standardIcon(QStyle::SP_TrashIcon));
+    addTool(QStringLiteral("▣"), tr("Nota adhesiva"), BoardScene::Tool::StickyNote,
+            {"note", "mail-mark-important"});
+    addTool(QStringLiteral("T"), tr("Texto"), BoardScene::Tool::Text,
+            {"draw-text", "format-text-bold"});
 
     m_shapesButton = createToolbarButton(QStringLiteral("○□"), tr("Formas"));
+    m_shapesButton->setIcon(themedIcon({"draw-rectangle", "applications-graphics"}, style()->standardIcon(QStyle::SP_FileDialogContentsView)));
     connect(m_shapesButton, &QToolButton::clicked, this, &MainWindow::showShapesMenu);
     tools->addWidget(m_shapesButton);
 
     auto *imageButton = createToolbarButton(QStringLiteral("▧"), tr("Imagen"), true);
+    imageButton->setIcon(themedIcon({"insert-image", "image-x-generic"}, style()->standardIcon(QStyle::SP_FileIcon)));
     m_toolButtons.insert(static_cast<int>(BoardScene::Tool::Image), imageButton);
     connect(imageButton, &QToolButton::clicked, this,
             [this] { setTool(static_cast<int>(BoardScene::Tool::Image)); });
     tools->addWidget(imageButton);
 
     auto *moreButton = createToolbarButton(QStringLiteral("⋯"), tr("Más opciones"));
+    moreButton->setIcon(themedIcon({"open-menu-symbolic", "preferences-system"}, style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
     connect(moreButton, &QToolButton::clicked, this, &MainWindow::showMoreMenu);
     tools->addWidget(moreButton);
 
     m_bottomBar->adjustSize();
     m_bottomBar->raise();
+    applyShadow(m_bottomBar, 34, 10, QColor(32, 30, 30, 34));
 
     m_zoomBar = new QFrame(m_boardPage);
     m_zoomBar->setObjectName("ZoomBar");
     auto *zoomLayout = new QHBoxLayout(m_zoomBar);
-    zoomLayout->setContentsMargins(7, 5, 7, 5);
-    zoomLayout->setSpacing(2);
+    zoomLayout->setContentsMargins(8, 6, 8, 6);
+    zoomLayout->setSpacing(4);
 
     auto *minus = new QToolButton(m_zoomBar);
     minus->setText(QStringLiteral("−"));
-    minus->setFixedSize(32, 32);
+    minus->setFixedSize(34, 34);
     connect(minus, &QToolButton::clicked, this, [this] { m_view->zoomBy(1.0 / 1.15); });
     zoomLayout->addWidget(minus);
 
@@ -344,22 +488,24 @@ void MainWindow::buildBoardPage() {
 
     auto *plus = new QToolButton(m_zoomBar);
     plus->setText(QStringLiteral("+"));
-    plus->setFixedSize(32, 32);
+    plus->setFixedSize(34, 34);
     connect(plus, &QToolButton::clicked, this, [this] { m_view->zoomBy(1.15); });
     zoomLayout->addWidget(plus);
 
     auto *reset = new QToolButton(m_zoomBar);
     reset->setText(QStringLiteral("⌗"));
     reset->setToolTip(tr("Restablecer zoom"));
-    reset->setFixedSize(32, 32);
+    reset->setFixedSize(34, 34);
     connect(reset, &QToolButton::clicked, m_view, &BoardView::resetZoom);
     zoomLayout->addWidget(reset);
 
     connect(m_view, &BoardView::zoomChanged, this, [this](int percent) {
         m_zoomLabel->setText(QString::number(percent) + "%");
     });
+
     m_zoomBar->adjustSize();
     m_zoomBar->raise();
+    applyShadow(m_zoomBar, 30, 8, QColor(32, 30, 30, 28));
 
     buildPenPopup();
     setTool(static_cast<int>(BoardScene::Tool::Pen));
@@ -370,16 +516,22 @@ void MainWindow::buildBoardPage() {
 void MainWindow::buildPenPopup() {
     m_penPopup = new QFrame(m_boardPage);
     m_penPopup->setObjectName("PenPopup");
-    m_penPopup->setFixedWidth(290);
+    m_penPopup->setFixedWidth(300);
     auto *layout = new QVBoxLayout(m_penPopup);
-    layout->setContentsMargins(15, 14, 15, 14);
+    layout->setContentsMargins(16, 16, 16, 16);
     layout->setSpacing(10);
+
+    auto *panelTitle = new QLabel(tr("Ajustes del lápiz"), m_penPopup);
+    panelTitle->setObjectName("PanelTitle");
+    layout->addWidget(panelTitle);
 
     auto addSliderRow = [this, layout](const QString &name, int min, int max, int value,
                                        QSlider **sliderOut, QLabel **valueOut) {
         auto *titleRow = new QHBoxLayout();
         auto *nameLabel = new QLabel(name, m_penPopup);
+        nameLabel->setObjectName("PanelTitle");
         auto *valueLabel = new QLabel(QString::number(value), m_penPopup);
+        valueLabel->setObjectName("PanelValue");
         valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         titleRow->addWidget(nameLabel);
         titleRow->addStretch();
@@ -404,19 +556,23 @@ void MainWindow::buildPenPopup() {
     addSliderRow(tr("Estabilización"), 0, 100, stabilization,
                  &m_stabilizationSlider, &m_stabilizationValue);
 
+    auto *paletteLabel = new QLabel(tr("Colores"), m_penPopup);
+    paletteLabel->setObjectName("PanelTitle");
+    layout->addWidget(paletteLabel);
+
     auto *colors = new QHBoxLayout();
-    colors->setSpacing(7);
+    colors->setSpacing(8);
     const QStringList palette = {
-        "#1f1f22", "#e51c2a", "#ff9f1a", "#10a65a",
-        "#36bbed", "#0a6fc2", "#ca1460", "#7142a1"
+        "#202124", "#e53935", "#fb8c00", "#16a34a",
+        "#36bbed", "#2563eb", "#d81b60", "#7c3aed"
     };
     for (const QString &hex : palette) {
         auto *color = new QToolButton(m_penPopup);
-        color->setFixedSize(26, 26);
+        color->setFixedSize(28, 28);
         color->setToolTip(hex);
         color->setStyleSheet(QString(
-            "QToolButton { background:%1; border:2px solid white; border-radius:13px; }"
-            "QToolButton:hover { border:2px solid #777; }").arg(hex));
+            "QToolButton { background:%1; border:2px solid white; border-radius:14px; }"
+            "QToolButton:hover { border:2px solid #8a8b92; }").arg(hex));
         connect(color, &QToolButton::clicked, this, [this, hex] {
             m_scene->setColor(QColor(hex));
             QSettings().setValue("pen/color", hex);
@@ -426,7 +582,7 @@ void MainWindow::buildPenPopup() {
     layout->addLayout(colors);
 
     connect(m_widthSlider, &QSlider::valueChanged, this, [this](int value) {
-        m_widthValue->setText(QString::number(value));
+        m_widthValue->setText(QString::number(value) + " px");
         m_scene->setStrokeWidth(value);
         QSettings().setValue("pen/width", value);
     });
@@ -444,7 +600,14 @@ void MainWindow::buildPenPopup() {
     m_scene->setStrokeWidth(width);
     m_scene->setStrokeOpacity(static_cast<qreal>(opacity) / 100.0);
     m_scene->setStabilization(stabilization);
-    m_scene->setColor(QColor(settings.value("pen/color", "#1f1f22").toString()));
+    m_scene->setColor(QColor(settings.value("pen/color", "#202124").toString()));
+    m_widthValue->setText(QString::number(width) + " px");
+    m_opacityValue->setText(QString::number(opacity) + "%");
+    m_stabilizationValue->setText(QString::number(stabilization) + "%");
+
+    m_penPopupEffect = new QGraphicsOpacityEffect(m_penPopup);
+    m_penPopupEffect->setOpacity(0.0);
+    m_penPopup->setGraphicsEffect(m_penPopupEffect);
 
     m_penPopup->adjustSize();
     m_penPopup->hide();
@@ -530,18 +693,20 @@ void MainWindow::refreshGallery() {
 
     auto *newCard = new QFrame(m_homePage);
     newCard->setObjectName("BoardCard");
-    newCard->setFixedSize(250, 175);
+    newCard->setFixedSize(260, 184);
     auto *newLayout = new QVBoxLayout(newCard);
-    newLayout->setContentsMargins(0, 0, 0, 0);
-    auto *newButton = new QPushButton(QStringLiteral("+"), newCard);
+    newLayout->setContentsMargins(0, 0, 0, 12);
+    newLayout->setSpacing(4);
+    auto *newButton = new QPushButton(QStringLiteral("＋"), newCard);
     newButton->setObjectName("NewBoardButton");
     newButton->setToolTip(tr("Crear una pizarra nueva"));
     connect(newButton, &QPushButton::clicked, this, &MainWindow::newBoard);
     newLayout->addWidget(newButton, 1);
     auto *newLabel = new QLabel(tr("Nueva pizarra"), newCard);
+    newLabel->setObjectName("NewBoardLabel");
     newLabel->setAlignment(Qt::AlignCenter);
-    newLabel->setStyleSheet("background:#1d43ff; color:white; font-size:14px; padding:0 0 12px 0;");
     newLayout->addWidget(newLabel);
+    applyShadow(newCard, 24, 7, QColor(32, 30, 30, 20));
     m_galleryGrid->addWidget(newCard, row, column);
     advance();
 
@@ -564,18 +729,18 @@ void MainWindow::refreshGallery() {
 
         auto *card = new QFrame(m_homePage);
         card->setObjectName("BoardCard");
-        card->setFixedSize(250, 175);
+        card->setFixedSize(260, 184);
         auto *cardLayout = new QVBoxLayout(card);
-        cardLayout->setContentsMargins(0, 0, 0, 8);
+        cardLayout->setContentsMargins(0, 0, 0, 10);
         cardLayout->setSpacing(4);
 
         auto *preview = new QPushButton(card);
         preview->setObjectName("PreviewButton");
-        preview->setFixedHeight(118);
+        preview->setFixedHeight(126);
         const QString thumb = thumbnailPath(path);
         if (QFileInfo::exists(thumb)) {
             preview->setIcon(QIcon(thumb));
-            preview->setIconSize(QSize(238, 112));
+            preview->setIconSize(QSize(248, 120));
         } else {
             preview->setText(QStringLiteral("✎"));
             preview->setStyleSheet("font-size:32px; color:#999;");
@@ -585,15 +750,16 @@ void MainWindow::refreshGallery() {
 
         auto *title = new QLabel(boardTitle(path), card);
         title->setObjectName("CardTitle");
-        title->setContentsMargins(12, 0, 10, 0);
+        title->setContentsMargins(14, 0, 10, 0);
         title->setTextInteractionFlags(Qt::NoTextInteraction);
         cardLayout->addWidget(title);
 
         auto *meta = new QLabel(prettyModified(info), card);
         meta->setObjectName("CardMeta");
-        meta->setContentsMargins(12, 0, 10, 0);
+        meta->setContentsMargins(14, 0, 10, 0);
         cardLayout->addWidget(meta);
 
+        applyShadow(card, 24, 7, QColor(32, 30, 30, 18));
         m_galleryGrid->addWidget(card, row, column);
         advance();
     }
@@ -601,6 +767,8 @@ void MainWindow::refreshGallery() {
 
 void MainWindow::newBoard() {
     m_scene->clear();
+    m_scene->setBackgroundColor(QColor("#f3f2f1"));
+    m_scene->setBackgroundStyle(BoardScene::BackgroundStyle::Solid);
     m_history.clear();
     m_historyIndex = -1;
     m_dirty = false;
@@ -687,7 +855,7 @@ void MainWindow::exportPng() {
     const QSize size = (bounds.size() * scale).toSize().expandedTo(QSize(1, 1));
 
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor("#f5f5f6"));
+    image.fill(m_scene->backgroundColor());
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     m_scene->render(&painter, QRectF(QPointF(0, 0), QSizeF(size)), bounds);
@@ -703,7 +871,7 @@ void MainWindow::saveThumbnail() {
     if (m_filePath.isEmpty()) return;
 
     QImage image(QSize(480, 270), QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor("#f5f5f6"));
+    image.fill(m_scene->backgroundColor());
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
 
@@ -773,6 +941,14 @@ void MainWindow::autosave() {
     m_saveState->setText(tr("Guardado"));
 }
 
+void MainWindow::styleButtonActive(QToolButton *button, bool active) {
+    if (!button) return;
+    button->setChecked(active);
+    button->setProperty("toolActive", active);
+    button->style()->unpolish(button);
+    button->style()->polish(button);
+}
+
 void MainWindow::setTool(int tool) {
     if (!m_scene || !m_view) return;
 
@@ -780,49 +956,92 @@ void MainWindow::setTool(int tool) {
     m_scene->setTool(value);
     m_view->setSelectionMode(value == BoardScene::Tool::Select);
 
-    for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
-        const bool active = it.key() == tool;
-        it.value()->setChecked(active);
-        it.value()->setProperty("toolActive", active);
-        it.value()->style()->unpolish(it.value());
-        it.value()->style()->polish(it.value());
-    }
+    for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it)
+        styleButtonActive(it.value(), it.key() == tool);
 
     if (value != BoardScene::Tool::Pen && value != BoardScene::Tool::Highlighter)
-        m_penPopup->hide();
+        animatePopup(m_penPopup, m_penPopupEffect, false, m_penPopup->geometry());
+}
+
+void MainWindow::animatePopup(QFrame *popup, QGraphicsOpacityEffect *effect, bool show, const QRect &finalGeometry) {
+    if (!popup || !effect) return;
+
+    auto *group = new QParallelAnimationGroup(popup);
+
+    QRect startGeom = finalGeometry;
+    startGeom.translate(0, show ? 12 : 0);
+    QRect endGeom = finalGeometry;
+    endGeom.translate(0, show ? 0 : 12);
+
+    auto *geoAnim = new QPropertyAnimation(popup, "geometry", group);
+    geoAnim->setDuration(180);
+    geoAnim->setStartValue(show ? startGeom : finalGeometry);
+    geoAnim->setEndValue(show ? finalGeometry : endGeom);
+    geoAnim->setEasingCurve(QEasingCurve::OutCubic);
+    group->addAnimation(geoAnim);
+
+    auto *opacityAnim = new QPropertyAnimation(effect, "opacity", group);
+    opacityAnim->setDuration(160);
+    opacityAnim->setStartValue(show ? 0.0 : 1.0);
+    opacityAnim->setEndValue(show ? 1.0 : 0.0);
+    opacityAnim->setEasingCurve(QEasingCurve::OutCubic);
+    group->addAnimation(opacityAnim);
+
+    if (show) {
+        popup->setGeometry(startGeom);
+        popup->show();
+        popup->raise();
+    } else {
+        connect(group, &QParallelAnimationGroup::finished, popup, [popup] { popup->hide(); });
+    }
+
+    group->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 void MainWindow::showPenPopup() {
-    if (!m_penPopup) return;
-    m_penPopup->setVisible(!m_penPopup->isVisible());
-    if (m_penPopup->isVisible()) {
-        repositionOverlays();
-        m_penPopup->raise();
-    }
+    if (!m_penPopup || !m_penPopupEffect) return;
+    repositionOverlays();
+    const bool show = !m_penPopup->isVisible();
+    animatePopup(m_penPopup, m_penPopupEffect, show, m_penPopup->geometry());
 }
 
 void MainWindow::showShapesMenu() {
     QMenu menu(this);
-    QAction *rectangle = menu.addAction(tr("▭  Rectángulo"));
-    QAction *ellipse = menu.addAction(tr("○  Elipse"));
-    QAction *line = menu.addAction(tr("╱  Línea"));
+    menu.addAction(themedIcon({"draw-rectangle"}), tr("Rectángulo"), [this] { setTool(static_cast<int>(BoardScene::Tool::Rectangle)); });
+    menu.addAction(themedIcon({"draw-ellipse"}), tr("Elipse"), [this] { setTool(static_cast<int>(BoardScene::Tool::Ellipse)); });
+    menu.addAction(themedIcon({"draw-line"}), tr("Línea"), [this] { setTool(static_cast<int>(BoardScene::Tool::Line)); });
 
     const QPoint pos = m_shapesButton->mapToGlobal(QPoint(0, -menu.sizeHint().height() - 8));
-    QAction *chosen = menu.exec(pos);
-    if (chosen == rectangle) setTool(static_cast<int>(BoardScene::Tool::Rectangle));
-    if (chosen == ellipse) setTool(static_cast<int>(BoardScene::Tool::Ellipse));
-    if (chosen == line) setTool(static_cast<int>(BoardScene::Tool::Line));
+    menu.exec(pos);
 }
 
 void MainWindow::showMoreMenu() {
     QMenu menu(this);
-    QAction *save = menu.addAction(tr("Guardar ahora\tCtrl+S"));
+    QAction *save = menu.addAction(themedIcon({"document-save-symbolic", "document-save"}, style()->standardIcon(QStyle::SP_DialogSaveButton)), tr("Guardar ahora\tCtrl+S"));
     QAction *saveAs = menu.addAction(tr("Guardar como…"));
-    QAction *open = menu.addAction(tr("Abrir…\tCtrl+O"));
+    QAction *open = menu.addAction(themedIcon({"document-open-symbolic", "document-open"}, style()->standardIcon(QStyle::SP_DialogOpenButton)), tr("Abrir…\tCtrl+O"));
     menu.addSeparator();
-    QAction *grid = menu.addAction(tr("Cuadrícula"));
-    grid->setCheckable(true);
-    grid->setChecked(m_scene->gridVisible());
+
+    QMenu *backgroundColorMenu = menu.addMenu(tr("Color de fondo"));
+    struct ColorOption { const char *name; const char *hex; };
+    const QList<ColorOption> colors = {
+        {"Blanco cálido", "#f3f2f1"},
+        {"Blanco", "#ffffff"},
+        {"Azul suave", "#eef4ff"},
+        {"Rosa suave", "#fff3f6"},
+        {"Menta", "#eefaf5"},
+        {"Lavanda", "#f5f1ff"}
+    };
+    for (const auto &opt : colors) {
+        backgroundColorMenu->addAction(opt.name, [this, opt] { m_scene->setBackgroundColor(QColor(opt.hex)); });
+    }
+
+    QMenu *backgroundStyleMenu = menu.addMenu(tr("Patrón de fondo"));
+    backgroundStyleMenu->addAction(tr("Sólido"), [this] { m_scene->setBackgroundStyle(BoardScene::BackgroundStyle::Solid); });
+    backgroundStyleMenu->addAction(tr("Puntos"), [this] { m_scene->setBackgroundStyle(BoardScene::BackgroundStyle::Dots); });
+    backgroundStyleMenu->addAction(tr("Cuadrícula"), [this] { m_scene->setBackgroundStyle(BoardScene::BackgroundStyle::Grid); });
+    backgroundStyleMenu->addAction(tr("Regla"), [this] { m_scene->setBackgroundStyle(BoardScene::BackgroundStyle::Ruled); });
+
     QAction *exportAction = menu.addAction(tr("Exportar PNG…"));
     menu.addSeparator();
     QAction *home = menu.addAction(tr("Mis pizarras"));
@@ -831,7 +1050,6 @@ void MainWindow::showMoreMenu() {
     if (chosen == save) saveBoard();
     else if (chosen == saveAs) saveBoardAs();
     else if (chosen == open) openBoard();
-    else if (chosen == grid) m_scene->setGridVisible(grid->isChecked());
     else if (chosen == exportAction) exportPng();
     else if (chosen == home) showHome();
 }
@@ -854,7 +1072,8 @@ void MainWindow::renameCurrentBoard() {
 
 void MainWindow::showHome() {
     if (m_dirty) saveBoard();
-    m_penPopup->hide();
+    if (m_penPopup && m_penPopup->isVisible())
+        animatePopup(m_penPopup, m_penPopupEffect, false, m_penPopup->geometry());
     refreshGallery();
     m_pages->setCurrentWidget(m_homePage);
     setWindowTitle("StudyBoard");

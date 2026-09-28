@@ -9,6 +9,7 @@ class BoardScene;
 class BoardView;
 class QCloseEvent;
 class QFrame;
+class QGraphicsOpacityEffect;
 class QGridLayout;
 class QLabel;
 class QLineEdit;
@@ -60,13 +61,15 @@ private:
     void repositionOverlays();
     void saveThumbnail();
     void addRecentBoard(const QString &path);
+    void styleButtonActive(QToolButton *button, bool active);
+    void animatePopup(QFrame *popup, QGraphicsOpacityEffect *effect, bool show, const QRect &finalGeometry);
 
     QString boardsDirectory() const;
     QString thumbnailPath(const QString &path) const;
     QString boardTitle(const QString &path) const;
     void setBoardTitle(const QString &path, const QString &title);
 
-    QToolButton *createToolbarButton(const QString &text, const QString &tooltip,
+    QToolButton *createToolbarButton(const QString &fallbackText, const QString &tooltip,
                                      bool checkable = false);
 
     BoardScene *m_scene = nullptr;
@@ -80,6 +83,7 @@ private:
     QFrame *m_bottomBar = nullptr;
     QFrame *m_zoomBar = nullptr;
     QFrame *m_penPopup = nullptr;
+    QGraphicsOpacityEffect *m_penPopupEffect = nullptr;
     QLineEdit *m_titleEdit = nullptr;
     QLabel *m_saveState = nullptr;
     QLabel *m_zoomLabel = nullptr;
